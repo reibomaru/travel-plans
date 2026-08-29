@@ -47,6 +47,7 @@
   },
   "auth": {
     "logout": "ログアウト",
-    "editProfile": "プロフィールを編集"
+    "editProfile": "プロフィールを編集",
+    "admin": "ユーザー管理"
   }
 }

@@ -69,7 +69,30 @@ node scripts/sql.ts "<SQL>"                          # CLI に無い操作用の
 
 スポット画面（`/spots`）やメモ画面（`/memo`）の **AI アシスタント**タブでは、Skill を使わずブラウザから直接 AI に依頼できる。AI は DB を直接書き換えず、提案カードを確認・修正して「保存」したときに反映される（プレビュー承認制）。
 
+## User approval (admin dashboard)
+
+ログインは許可制。新規ユーザーは Firestore の `users` に `allowed: false`（承認待ち）で
+登録され、承認されるまでアプリを使えない。承認は `/admin` の管理ダッシュボードから行う
+（ユーザー一覧・承認 / 承認取り消し・ロール変更）。
+
+アクセス制御は二段構え:
+
+1. **Basic 認証** — `/admin` 配下（画面 + API）。`ADMIN_BASIC_USER` / `ADMIN_BASIC_PASS` が
+   両方設定されているときだけ有効で、未設定なら `/admin` は 503 で閉じる。
+2. **`role: admin`（Google SSO）** — `/admin/api/*`。非 admin は 403。
+
+最初の管理者は `ADMIN_EMAILS`（カンマ区切り）で作る。ここに挙げたメールはログイン時に
+`allowed: true` / `role: admin` へ自動昇格する。以降のロール変更はダッシュボードから行える。
+
 ## Configuration
+
+管理ダッシュボード（`.env`）で使う環境変数:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ADMIN_BASIC_USER` | （未設定で `/admin` 無効） | `/admin` の Basic 認証ユーザー名 |
+| `ADMIN_BASIC_PASS` | （未設定で `/admin` 無効） | `/admin` の Basic 認証パスワード |
+| `ADMIN_EMAILS` | （任意） | 初期管理者のメール（カンマ区切り）。ログイン時に `allowed`/`admin` へ昇格 |
 
 AI アシスタント（`.env`）で使う環境変数:
 

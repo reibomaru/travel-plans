@@ -47,6 +47,7 @@
   },
   "auth": {
     "logout": "Log out",
-    "editProfile": "Edit profile"
+    "editProfile": "Edit profile",
+    "admin": "User management"
   }
 }

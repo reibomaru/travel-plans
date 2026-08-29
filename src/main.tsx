@@ -15,6 +15,7 @@ import BudgetPage from "./pages/BudgetPage";
 import SpotsPage from "./pages/SpotsPage";
 import MemoListPage from "./pages/MemoListPage";
 import MemoDetailPage from "./pages/MemoDetailPage";
+import AdminPage from "./pages/AdminPage";
 
 // 地図(deck.gl)は重いので必要時のみ遅延ロード
 const MapPage = lazy(() => import("./pages/MapPage"));
@@ -41,6 +42,8 @@ createRoot(document.getElementById("root")!).render(
         <Routes>
           {/* ログイン後のトップ: プロジェクト一覧 */}
           <Route path="/" element={<ProjectsPage />} />
+          {/* 管理ダッシュボード（admin 限定・Basic 認証は server/admin.ts） */}
+          <Route path="/admin" element={<AdminPage />} />
           {/* プロジェクト配下（共有テナント） */}
           <Route path="/projects/:projectId" element={<ProjectShell />}>
             <Route index element={<Navigate to="itinerary" replace />} />
