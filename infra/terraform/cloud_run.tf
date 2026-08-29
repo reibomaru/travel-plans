@@ -21,6 +21,10 @@ locals {
     APP_BASE_URL          = var.app_base_url
     FIRESTORE_PROJECT_ID  = var.project_id
     FIRESTORE_DATABASE_ID = google_firestore_database.users.name
+    # メール送信（承認完了メールなど・#102）。RESEND_API_KEY があれば自動で resend が
+    # 選ばれるが、本番は明示する。差出人は検証済みアドレスを指定する。
+    MAIL_PROVIDER = "resend"
+    MAIL_FROM     = var.mail_from
   }
 }
 

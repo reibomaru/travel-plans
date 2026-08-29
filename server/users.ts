@@ -40,6 +40,8 @@ export interface UserRecord {
   picture?: string;
   /** 本人がアップロードしたアバター（リサイズ済みの data URL）。 */
   avatar?: string;
+  /** 承認完了メールを送った時刻（ISO 文字列）。未送信は undefined（#102・冪等キー）。 */
+  approvalNotifiedAt?: string;
 }
 
 /** 不明値を安全に Role へ丸める（既定 user）。 */
@@ -58,6 +60,7 @@ function toUserRecord(id: string, x: Record<string, unknown>): UserRecord {
     displayName: typeof x.displayName === "string" ? x.displayName : undefined,
     picture: typeof x.picture === "string" ? x.picture : undefined,
     avatar: typeof x.avatar === "string" ? x.avatar : undefined,
+    approvalNotifiedAt: typeof x.approvalNotifiedAt === "string" ? x.approvalNotifiedAt : undefined,
   };
 }
 
@@ -219,4 +222,71 @@ export async function updateOwnProfile(
   // FieldValue.delete() の反映後の正確な状態を返すため読み直す。
   const fresh = await ref.get();
   return toUserRecord(sub, fresh.data() ?? {});
+}
+
+// ============================================================
+//  利用承認とその通知（#102）。
+//
+//  承認は allowed を false → true にする操作。承認の入口（管理ダッシュボード）は
+//  #103 が担い、ここでは「allowed の切り替え」と「承認完了メールの冪等な送信状態」
+//  を Firestore で管理する低レベル API を提供する。メール本文の組み立て・送信の
+//  オーケストレーションは server/approval.ts が担当する。
+// ============================================================
+
+/** setUserAllowed の結果。changed は今回の呼び出しで実際に値が変わったか。 */
+export interface SetAllowedResult {
+  /** false→true / true→false の遷移が今回起きたか（冪等呼び出しでは false）。 */
+  changed: boolean;
+  /** 更新後（既に同値だった場合は現状）のユーザーレコード。存在しなければ null。 */
+  user: UserRecord | null;
+}
+
+/**
+ * ユーザーの利用許可（allowed）を設定する。トランザクションで現在値と比較し、
+ * 実際に変わったときだけ書き込む（冪等）。ドキュメントが無ければ何もしない。
+ */
+export async function setUserAllowed(sub: string, allowed: boolean): Promise<SetAllowedResult> {
+  const ref = firestore().collection(COLLECTION).doc(sub);
+  return firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { changed: false, user: null };
+    const data = snap.data() ?? {};
+    const current = data.allowed === true;
+    if (current === allowed) {
+      return { changed: false, user: toUserRecord(sub, data) };
+    }
+    const patch = { allowed, updatedAt: new Date().toISOString() };
+    tx.set(ref, patch, { merge: true });
+    return { changed: true, user: toUserRecord(sub, { ...data, ...patch }) };
+  });
+}
+
+/**
+ * 承認完了メールの送信枠を「予約」する（冪等キー approvalNotifiedAt を立てる）。
+ * - allowed=true かつ未通知（approvalNotifiedAt 無し）のときだけ枠を確保し、その
+ *   ユーザーレコードを返す（＝呼び出し側は 1 回だけ送信する）。
+ * - 既に通知済み・未承認・存在しない場合は null（＝送らない）。
+ * トランザクションで確保するため、同時に複数回呼ばれても送信は 1 回に収束する。
+ * 送信に失敗した場合は releaseApprovalNotification で枠を戻して再送可能にする。
+ */
+export async function claimApprovalNotification(sub: string): Promise<UserRecord | null> {
+  const ref = firestore().collection(COLLECTION).doc(sub);
+  return firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    const data = snap.data() ?? {};
+    if (data.allowed !== true) return null; // 未承認には送らない
+    if (typeof data.approvalNotifiedAt === "string") return null; // 送信済み（冪等）
+    const now = new Date().toISOString();
+    tx.set(ref, { approvalNotifiedAt: now, updatedAt: now }, { merge: true });
+    return toUserRecord(sub, { ...data, approvalNotifiedAt: now });
+  });
+}
+
+/** 送信失敗時に予約を取り消す（approvalNotifiedAt を消し、次の承認操作で再送できるようにする）。 */
+export async function releaseApprovalNotification(sub: string): Promise<void> {
+  await firestore()
+    .collection(COLLECTION)
+    .doc(sub)
+    .set({ approvalNotifiedAt: FieldValue.delete(), updatedAt: new Date().toISOString() }, { merge: true });
 }

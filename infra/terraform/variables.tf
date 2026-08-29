@@ -45,6 +45,8 @@ variable "secret_ids" {
     "GOOGLE_OAUTH_CLIENT_ID",
     "GOOGLE_OAUTH_CLIENT_SECRET",
     "SESSION_SECRET",
+    # メール送信（承認完了メールなど・#102）: Resend の API キー。
+    "RESEND_API_KEY",
   ]
 }
 
@@ -56,6 +58,12 @@ variable "app_base_url" {
   description = "OAuth リダイレクト URI 組み立て用のアプリのベース URL。<app_base_url>/auth/google が Google に送られるので、承認済みリダイレクト URI と一致させる。空ならリクエストから自動解決（Cloud Run では http/host のズレで mismatch になりやすいので明示推奨）。"
   # 公開はカスタムドメイン（外部 HTTPS LB）経由。run.app は ingress で遮断済み。
   default = "https://booklet-ai.com"
+}
+
+variable "mail_from" {
+  type        = string
+  description = "承認完了メール等の差出人アドレス（#102）。Resend で検証済みのドメイン/アドレスを指定する。"
+  default     = "shiori <no-reply@booklet-ai.com>"
 }
 
 variable "domain" {

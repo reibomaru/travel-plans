@@ -9,6 +9,7 @@
 # service_name      = "shiori"                                           # 既定あり
 # github_repository = "reibomaru/travel-plans"                           # 既定あり
 # app_base_url      = "https://shiori-1014849882013.asia-northeast1.run.app"  # 既定あり（OAuth redirect_uri 用）
+# mail_from         = "shiori <no-reply@booklet-ai.com>"                      # 既定あり（承認完了メールの差出人・#102）
 
 # 秘匿値（SESSION_SECRET / GOOGLE_OAUTH_* など）は tfvars ではなく Secret Manager に
 # 手動投入する（README 参照）。利用許可・ロールは Firestore の users コレクションで管理する。

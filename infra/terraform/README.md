@@ -12,7 +12,7 @@ Cloud Run + Litestream + GCS + Secret Manager + Workload Identity Federation 一
 - **Artifact Registry**（Docker リポジトリ）。
 - **GCS バケット** 2 つ: `*-state`（Litestream レプリカ + backups）、`*-sessions`（AI チャット履歴 JSONL, FUSE マウント）。
 - **Firestore**（`(default)`, Native）: `users`（プロフィール）と `projects`（プロジェクト・メンバー）の台帳。実行 SA に `roles/datastore.user`。
-- **Secret Manager**: `GEMINI_API_KEY` / `WEBSEARCH_API_KEY` / `GOOGLE_MAPS_API_KEY` / `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `SESSION_SECRET`（入れ物のみ。値は手動投入）。
+- **Secret Manager**: `GEMINI_API_KEY` / `WEBSEARCH_API_KEY` / `GOOGLE_MAPS_API_KEY` / `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `SESSION_SECRET` / `RESEND_API_KEY`（入れ物のみ。値は手動投入）。
 - **IAM**: 実行 SA、デプロイ SA、GitHub Actions 用 Workload Identity 連携。
 
 ## 手順
@@ -58,7 +58,17 @@ printf '%s' "$GOOGLE_OAUTH_CLIENT_ID"     | gcloud secrets versions add GOOGLE_O
 printf '%s' "$GOOGLE_OAUTH_CLIENT_SECRET" | gcloud secrets versions add GOOGLE_OAUTH_CLIENT_SECRET --data-file=-
 # JWT Cookie の署名鍵（十分に長いランダム文字列。例 openssl rand -hex 32）。
 openssl rand -hex 32 | gcloud secrets versions add SESSION_SECRET --data-file=-
+# 承認完了メール（#102）の送信に使う Resend の API キー（https://resend.com で取得）。
+printf '%s' "$RESEND_API_KEY" | gcloud secrets versions add RESEND_API_KEY --data-file=-
 ```
+
+> **注意**: Cloud Run は各シークレットの `version=latest` を環境変数として参照するため、
+> 値が 1 バージョンも無いシークレットがあるとデプロイ（Service 更新）に失敗する。
+> `RESEND_API_KEY` を含め、**上の値投入は Service が起動する前に済ませておく**こと。
+>
+> **差出人アドレス**: 承認完了メールの `MAIL_FROM` は非秘匿値のため Terraform 管理
+> （`var.mail_from`・既定 `shiori <no-reply@booklet-ai.com>`）。Resend 側でドメイン検証を
+> 済ませたアドレスに合わせる（別ドメインなら `terraform.tfvars` で `mail_from` を上書き）。
 
 > **OAuth クライアント**: GCP コンソール「API とサービス → 認証情報」で OAuth 2.0 クライアント（Web）を作成し、
 > 承認済みリダイレクト URI に `<本番の origin>/auth/google` を登録する。
