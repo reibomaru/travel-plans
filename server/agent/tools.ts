@@ -14,6 +14,7 @@ import { Type } from "typebox";
 import type { DatabaseSync } from "node:sqlite";
 import * as spotsRepo from "../../db/spots-repo.ts";
 import * as memoRepo from "../../db/memo-repo.ts";
+import * as itineraryRepo from "../../db/itinerary-repo.ts";
 import { htmlToText } from "./html.ts";
 import type { EmitFn } from "./runner.ts";
 
@@ -48,6 +49,66 @@ function pickFields(p: Record<string, unknown>, fields: readonly string[]): Reco
 /** メモ提案で下書きに載せるフィールド（history.ts の MEMO_PROPOSAL_FIELDS と揃える）。 */
 export const MEMO_PROPOSAL_FIELDS = ["title", "body"] as const;
 
+/** spots（行きたい候補）の一覧を返す読み取り専用ツール（spot / memo 双方で共有）。 */
+function makeListSpots(db: DatabaseSync): ToolDefinition {
+  return defineTool({
+    name: "list_spots",
+    label: "候補一覧",
+    description:
+      "現在登録されている行きたいスポット候補の一覧を返す。重複チェックや、更新・削除の対象 id を特定するために使う。",
+    promptSnippet: "list_spots() — 既存の候補一覧を取得",
+    parameters: Type.Object({}),
+    async execute() {
+      const spots = spotsRepo.listSpots(db);
+      if (spots.length === 0) return text("候補はまだ 1 件もありません。");
+      const lines = spots.map(
+        (s) =>
+          `#${s.id} ${s.name}${s.name_en ? ` (${s.name_en})` : ""} / ${s.country ?? "?"}${
+            s.city ? "・" + s.city : ""
+          } / ${s.category ?? "未分類"} / 座標${
+            s.lat != null && s.lng != null ? "あり" : "なし"
+          }${s.google_maps_url ? " / Mapリンクあり" : ""}`,
+      );
+      return text(`現在 ${spots.length} 件:\n${lines.join("\n")}`);
+    },
+  });
+}
+
+/** 旅程（days / items）の一覧を返す読み取り専用ツール（spot / memo 双方で共有）。 */
+function makeListItinerary(db: DatabaseSync): ToolDefinition {
+  return defineTool({
+    name: "list_itinerary",
+    label: "旅程を参照",
+    description:
+      "旅行の全日程（days）と各日の予定（items）を時系列で取得する。何日目にどこへ行き、どの移動・食事・宿泊が入っているかを把握するために使う。各日の day_no・日付・都市と、予定ごとの時刻・種別・タイトル・メモ・概算費用が分かる。",
+    promptSnippet: "list_itinerary() — 全日程と各日の予定を取得",
+    parameters: Type.Object({}),
+    async execute() {
+      const days = itineraryRepo.listItinerary(db);
+      if (days.length === 0) return text("旅程はまだ 1 日も登録されていません。");
+      const blocks = days.map((d) => {
+        const head = `Day${d.day_no}${d.date ? ` (${d.date})` : ""}${d.city ? ` ${d.city}` : ""}${
+          d.title ? ` — ${d.title}` : ""
+        }`;
+        if (d.items.length === 0) return `${head}\n  （予定なし）`;
+        const lines = d.items.map((it) => {
+          const parts = [
+            it.time ? it.time : "--:--",
+            `[${it.type}]`,
+            it.title,
+          ];
+          if (it.cost != null) parts.push(`約${it.cost.toLocaleString("ja-JP")}円`);
+          let line = `  ${parts.join(" ")}`;
+          if (it.note && it.note.trim()) line += `\n    ${it.note.trim().slice(0, 300)}`;
+          return line;
+        });
+        return `${head}\n${lines.join("\n")}`;
+      });
+      return text(`全 ${days.length} 日:\n\n${blocks.join("\n\n")}`);
+    },
+  });
+}
+
 /** memo_pages の一覧を返す読み取り専用ツール（spot / memo 双方で共有）。 */
 function makeListMemoPages(db: DatabaseSync): ToolDefinition {
   return defineTool({
@@ -77,27 +138,7 @@ function makeListMemoPages(db: DatabaseSync): ToolDefinition {
  * リクエスト 1 回分のツール一式を生成する。
  */
 export function createSpotTools({ db, emit, webSearchApiKey }: SpotToolsOptions): ToolDefinition[] {
-  const list_spots = defineTool({
-    name: "list_spots",
-    label: "候補一覧",
-    description:
-      "現在登録されている行きたいスポット候補の一覧を返す。重複チェックや、更新・削除の対象 id を特定するために使う。",
-    promptSnippet: "list_spots() — 既存の候補一覧を取得",
-    parameters: Type.Object({}),
-    async execute() {
-      const spots = spotsRepo.listSpots(db);
-      if (spots.length === 0) return text("候補はまだ 1 件もありません。");
-      const lines = spots.map(
-        (s) =>
-          `#${s.id} ${s.name}${s.name_en ? ` (${s.name_en})` : ""} / ${s.country ?? "?"}${
-            s.city ? "・" + s.city : ""
-          } / ${s.category ?? "未分類"} / 座標${
-            s.lat != null && s.lng != null ? "あり" : "なし"
-          }${s.google_maps_url ? " / Mapリンクあり" : ""}`,
-      );
-      return text(`現在 ${spots.length} 件:\n${lines.join("\n")}`);
-    },
-  });
+  const list_spots = makeListSpots(db);
 
   const list_memo_pages = makeListMemoPages(db);
 
@@ -354,6 +395,9 @@ export interface MemoToolsOptions {
  */
 export function createMemoTools({ db, emit }: MemoToolsOptions): ToolDefinition[] {
   const list_memo_pages = makeListMemoPages(db);
+  // 旅程・スポットは読み取り専用で参照だけできる（編集は各担当エージェント/UI に任せる）。
+  const list_itinerary = makeListItinerary(db);
+  const list_spots = makeListSpots(db);
 
   const get_memo_page = defineTool({
     name: "get_memo_page",
@@ -435,5 +479,12 @@ export function createMemoTools({ db, emit }: MemoToolsOptions): ToolDefinition[
     },
   });
 
-  return [list_memo_pages, get_memo_page, propose_upsert_memo_page, propose_delete_memo_page];
+  return [
+    list_memo_pages,
+    list_itinerary,
+    list_spots,
+    get_memo_page,
+    propose_upsert_memo_page,
+    propose_delete_memo_page,
+  ];
 }

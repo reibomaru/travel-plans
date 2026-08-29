@@ -35,6 +35,7 @@ import {
 } from "./apiKeys.ts";
 import * as spotsRepo from "../db/spots-repo.ts";
 import * as memoRepo from "../db/memo-repo.ts";
+import * as itineraryRepo from "../db/itinerary-repo.ts";
 import * as expensesRepo from "../db/expenses-repo.ts";
 import { getSpotRatings, invalidateSpotCache, previewPlace } from "./places.ts";
 import { registerSpotChatRoute, registerMemoChatRoute } from "./agent/route.ts";
@@ -49,8 +50,6 @@ import type { AgentImage, TurnUsage } from "./agent/runner.ts";
 import { sanitizeHtml, htmlToText } from "./agent/html.ts";
 import type {
   TripMeta,
-  Day,
-  Item,
   RoutePoint,
   BudgetItem,
   LegFeature,
@@ -259,9 +258,7 @@ app.onError((err, c) => {
 app.get("/api/trip", (c) => {
   const db = c.get("db");
   const trip = (db.prepare("SELECT * FROM trip WHERE id = 1").get() as unknown as TripMeta | undefined) || null;
-  const days = db.prepare("SELECT * FROM days ORDER BY day_no").all() as unknown as Day[];
-  const allItems = db.prepare("SELECT * FROM items ORDER BY day_id, sort_order, time").all() as unknown as Item[];
-  for (const d of days) d.items = allItems.filter((it) => it.day_id === d.id);
+  const days = itineraryRepo.listItinerary(db);
   const route = db.prepare("SELECT * FROM route ORDER BY order_index").all() as unknown as RoutePoint[];
   // legs: GeoJSON Feature の配列として返す（フロントはそのまま <GeoJSON> で描画）
   const legs = (db.prepare("SELECT * FROM legs ORDER BY order_index").all() as unknown as LegRow[]).map(legToFeature);
