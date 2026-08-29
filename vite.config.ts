@@ -10,6 +10,9 @@ export default defineConfig({
       // /auth はブラウザのトップレベル遷移（Google OAuth リダイレクト）も含めて中継する。
       "/api": process.env.VITE_API_TARGET || "http://localhost:8080",
       "/auth": process.env.VITE_API_TARGET || "http://localhost:8080",
+      // 管理ダッシュボードの API（Basic 認証 + role=admin）。画面(/admin)自体は
+      // SPA なので Vite が返し、API だけを API サーバーへ転送する。
+      "/admin/api": process.env.VITE_API_TARGET || "http://localhost:8080",
     },
   },
 });

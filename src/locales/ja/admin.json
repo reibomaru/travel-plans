@@ -1,0 +1,68 @@
+{
+  "heading": "ユーザー管理",
+  "subtitle": "新規ユーザーの利用申請を承認します。",
+  "backToProjects": "プロジェクト一覧へ",
+  "reload": "再読み込み",
+  "filter": {
+    "label": "絞り込み",
+    "all": "すべて",
+    "pending": "承認待ち",
+    "approved": "承認済み"
+  },
+  "pendingCount_one": "承認待ち {{count}} 件",
+  "pendingCount_other": "承認待ち {{count}} 件",
+  "column": {
+    "user": "ユーザー",
+    "role": "ロール",
+    "status": "承認状態",
+    "createdAt": "登録日時"
+  },
+  "status": {
+    "pending": "承認待ち",
+    "approved": "承認済み"
+  },
+  "role": {
+    "admin": "管理者",
+    "user": "一般"
+  },
+  "actions": {
+    "approve": "承認",
+    "revoke": "承認を取り消す",
+    "changeRole": "ロールを変更"
+  },
+  "self": "自分",
+  "empty": "ユーザーがいません。",
+  "emptyFiltered": "条件に合うユーザーがいません。",
+  "confirm": {
+    "revoke": {
+      "title": "利用承認を取り消しますか？",
+      "message": "{{name}} はアプリを利用できなくなります（再度ログインすると承認待ちになります）。",
+      "action": "取り消す"
+    },
+    "promote": {
+      "title": "管理者にしますか？",
+      "message": "{{name}} はこの管理ダッシュボードで全ユーザーの承認・ロール変更ができるようになります。",
+      "action": "管理者にする"
+    },
+    "demote": {
+      "title": "管理者権限を外しますか？",
+      "message": "{{name}} は管理ダッシュボードを利用できなくなります。",
+      "action": "権限を外す"
+    }
+  },
+  "denied": {
+    "forbidden": {
+      "title": "アクセス権がありません",
+      "message": "この画面は管理者（admin）のみ利用できます。"
+    },
+    "unauthorized": {
+      "title": "認証が必要です",
+      "message": "管理ダッシュボードの Basic 認証、またはログインが必要です。ページを再読み込みしてやり直してください。"
+    },
+    "unconfigured": {
+      "title": "管理ダッシュボードは無効です",
+      "message": "サーバーに ADMIN_BASIC_USER / ADMIN_BASIC_PASS が設定されていません。"
+    }
+  },
+  "error": "更新に失敗しました。時間をおいて再度お試しください。"
+}

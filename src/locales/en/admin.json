@@ -1,0 +1,68 @@
+{
+  "heading": "User management",
+  "subtitle": "Approve access requests from new users.",
+  "backToProjects": "Back to projects",
+  "reload": "Reload",
+  "filter": {
+    "label": "Filter",
+    "all": "All",
+    "pending": "Pending",
+    "approved": "Approved"
+  },
+  "pendingCount_one": "{{count}} pending",
+  "pendingCount_other": "{{count}} pending",
+  "column": {
+    "user": "User",
+    "role": "Role",
+    "status": "Status",
+    "createdAt": "Registered"
+  },
+  "status": {
+    "pending": "Pending",
+    "approved": "Approved"
+  },
+  "role": {
+    "admin": "Admin",
+    "user": "User"
+  },
+  "actions": {
+    "approve": "Approve",
+    "revoke": "Revoke approval",
+    "changeRole": "Change role"
+  },
+  "self": "You",
+  "empty": "No users yet.",
+  "emptyFiltered": "No users match this filter.",
+  "confirm": {
+    "revoke": {
+      "title": "Revoke access?",
+      "message": "{{name}} will no longer be able to use the app (signing in again puts them back in the pending queue).",
+      "action": "Revoke"
+    },
+    "promote": {
+      "title": "Make this user an admin?",
+      "message": "{{name}} will be able to approve users and change roles from this dashboard.",
+      "action": "Make admin"
+    },
+    "demote": {
+      "title": "Remove admin rights?",
+      "message": "{{name}} will lose access to this dashboard.",
+      "action": "Remove"
+    }
+  },
+  "denied": {
+    "forbidden": {
+      "title": "Access denied",
+      "message": "This dashboard is available to administrators only."
+    },
+    "unauthorized": {
+      "title": "Authentication required",
+      "message": "The dashboard needs its basic-auth credentials, or you need to sign in. Reload the page and try again."
+    },
+    "unconfigured": {
+      "title": "Dashboard is disabled",
+      "message": "ADMIN_BASIC_USER / ADMIN_BASIC_PASS are not set on the server."
+    }
+  },
+  "error": "Update failed. Please try again later."
+}

@@ -6,11 +6,12 @@
 //  Firestore の users コレクションで管理する。ログインは許可制: 新規ユーザーは
 //  allowed=false（承認待ち）で登録され、承認（allowed=true）されるまでアプリを
 //  使えない。承認済みユーザーの中で、どのプロジェクトを見られるかはプロジェクト
-//  メンバーシップ（server/projects.ts）が担う。role は将来のプラットフォーム
-//  管理用に保持する（現状は未使用）。
+//  メンバーシップ（server/projects.ts）が担う。role=admin は管理ダッシュボード
+//  （server/admin.ts）の閲覧・操作権限を表す。
 //
-//  承認は Firestore の該当ドキュメントを allowed=true にする
-//  （初期は GCP コンソール / gcloud で直接編集）。
+//  承認は Firestore の該当ドキュメントを allowed=true にする。通常は管理
+//  ダッシュボード（server/admin.ts）から行い、初期管理者だけは ADMIN_EMAILS
+//  でログイン時に自動昇格させる（鶏卵問題の回避）。
 //
 //  プロフィール（displayName / avatar）は本人が随時編集でき、/auth/me が
 //  毎回読み出して反映する（セッション JWT は再発行しない）。
@@ -23,7 +24,7 @@ import { Firestore, FieldValue } from "@google-cloud/firestore";
 
 const COLLECTION = process.env.FIRESTORE_USERS_COLLECTION || "users";
 
-/** ユーザーのロール（将来のプラットフォーム管理用）。 */
+/** ユーザーのロール（admin は管理ダッシュボードを操作できる）。 */
 export type Role = "admin" | "user";
 
 /** ログインユーザーの識別情報 + プロフィール。 */
@@ -40,6 +41,10 @@ export interface UserRecord {
   picture?: string;
   /** 本人がアップロードしたアバター（リサイズ済みの data URL）。 */
   avatar?: string;
+  /** 初回ログイン（JIT 登録）の日時（ISO 8601）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO 8601）。 */
+  updatedAt?: string;
 }
 
 /** 不明値を安全に Role へ丸める（既定 user）。 */
@@ -58,6 +63,8 @@ function toUserRecord(id: string, x: Record<string, unknown>): UserRecord {
     displayName: typeof x.displayName === "string" ? x.displayName : undefined,
     picture: typeof x.picture === "string" ? x.picture : undefined,
     avatar: typeof x.avatar === "string" ? x.avatar : undefined,
+    createdAt: typeof x.createdAt === "string" ? x.createdAt : undefined,
+    updatedAt: typeof x.updatedAt === "string" ? x.updatedAt : undefined,
   };
 }
 
@@ -79,10 +86,28 @@ export function firestore(): Firestore {
   return _fs;
 }
 
+const normEmail = (email: string): string => (email || "").trim().toLowerCase();
+
+/**
+ * 初期管理者（ADMIN_EMAILS・カンマ区切り）に含まれるメールか。
+ * 管理ダッシュボードは role=admin でしか操作できないが、その最初の admin を
+ * 作る手段が無いと鶏卵問題になるため、ここに挙げたメールはログイン時に
+ * allowed=true / role=admin へ自動昇格させる。
+ */
+function isBootstrapAdmin(email: string): boolean {
+  const target = normEmail(email);
+  if (!target) return false;
+  return (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map(normEmail)
+    .includes(target);
+}
+
 /**
  * ログイン時に users を JIT upsert し、利用許可とロールを返す。
  * - 新規: allowed=false（承認待ち）/ role=user で作成。
  * - 既存: email / name / picture / updatedAt を更新し、既存の allowed / role を返す。
+ * - ADMIN_EMAILS に一致するメールは、新規・既存を問わず allowed=true / role=admin にする。
  * 利用可否は「ログイン時のみ」判定する（server/auth.ts のコールバック）。
  */
 export async function upsertUserOnLogin(
@@ -95,17 +120,52 @@ export async function upsertUserOnLogin(
   const snap = await ref.get();
   const now = new Date().toISOString();
   const pic = picture ? { picture } : {};
+  const bootstrap = isBootstrapAdmin(email);
+  const boot = bootstrap ? { allowed: true, role: "admin" as const } : {};
 
   if (!snap.exists) {
-    const doc = { sub, email, name, allowed: false, role: "user", createdAt: now, updatedAt: now, ...pic };
+    const doc = { sub, email, name, allowed: false, role: "user", createdAt: now, updatedAt: now, ...pic, ...boot };
     await ref.set(doc);
     return toUserRecord(sub, doc);
   }
 
   const data = snap.data() ?? {};
-  const patch = { email, name, updatedAt: now, ...pic };
+  const patch = { email, name, updatedAt: now, ...pic, ...boot };
   await ref.set(patch, { merge: true });
   return toUserRecord(sub, { ...data, ...patch });
+}
+
+// ============================================================
+//  管理ダッシュボード（#103）の台帳操作。
+//  ルート・アクセス制御（Basic 認証 + role=admin）は server/admin.ts が担う。
+// ============================================================
+
+/** 全ユーザーを登録日時の新しい順で返す（管理ダッシュボードの一覧用）。 */
+export async function listAllUsers(): Promise<UserRecord[]> {
+  const snap = await firestore().collection(COLLECTION).get();
+  return snap.docs
+    .map((d) => toUserRecord(d.id, d.data() ?? {}))
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+}
+
+/**
+ * 管理者による利用許可・ロールの更新（存在必須）。
+ * undefined のフィールドは変更しない。更新後のレコードを返す（未登録は null）。
+ */
+export async function updateUserByAdmin(
+  sub: string,
+  patch: { allowed?: boolean; role?: Role },
+): Promise<UserRecord | null> {
+  const ref = firestore().collection(COLLECTION).doc(sub);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+  if (patch.allowed !== undefined) update.allowed = patch.allowed;
+  if (patch.role !== undefined) update.role = patch.role;
+  await ref.set(update, { merge: true });
+
+  return toUserRecord(sub, { ...(snap.data() ?? {}), ...update });
 }
 
 // ============================================================

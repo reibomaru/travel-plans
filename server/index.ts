@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { registerAuthRoutes, requireAuth } from "./auth.ts";
+import { registerAdminRoutes } from "./admin.ts";
 import { closeAllProjectDbs, deleteProjectStorage, getProjectDb } from "./storage.ts";
 import {
   addMember,
@@ -829,6 +830,10 @@ app.get("/api/geocode", async (c) => {
 
 // ---- ヘルスチェック ----------------------------------------
 app.get("/health", (c) => c.json({ status: "ok", uptime: process.uptime() }));
+
+// ---- 管理ダッシュボード（利用承認・#103）--------------------
+// Basic 認証 + role=admin。静的配信より前に登録して middleware を効かせる。
+registerAdminRoutes(app);
 
 // ---- フロント配信（本番: dist を静的配信 + SPA フォールバック）----
 // これらは全 /api ルートより後に登録するため、API が優先して処理される。

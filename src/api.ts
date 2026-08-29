@@ -82,6 +82,34 @@ export interface Me {
   avatarUrl?: string | null;
 }
 
+/** 管理ダッシュボード（/admin）が扱うユーザー台帳の 1 行。 */
+export interface AdminUser {
+  sub: string;
+  email: string;
+  name: string;
+  /** アプリの利用許可（承認制）。false は承認待ち。 */
+  allowed: boolean;
+  role: Role;
+  displayName?: string;
+  picture?: string;
+  avatar?: string;
+  /** 初回ログイン（JIT 登録）の日時（ISO 8601）。 */
+  createdAt?: string;
+  /** 最終更新日時（ISO 8601）。 */
+  updatedAt?: string;
+}
+
+/** 管理 API がアクセスを拒んだ理由（画面の出し分け用）。 */
+export type AdminDeniedReason = "forbidden" | "unauthorized" | "unconfigured";
+
+/** 管理 API のアクセス拒否（403 / 401 / 503）。画面で理由別の案内を出す。 */
+export class AdminAccessError extends Error {
+  constructor(readonly reason: AdminDeniedReason) {
+    super(`admin access denied: ${reason}`);
+    this.name = "AdminAccessError";
+  }
+}
+
 /** 表示に使う名前を返す（displayName 優先、無ければ name、最後に email）。 */
 export const displayNameOf = (u: { displayName?: string | null; name?: string; email: string }) =>
   u.displayName || u.name || u.email;
@@ -153,6 +181,27 @@ async function http<T>(url: string, method: string, body?: unknown): Promise<T> 
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/**
+ * 管理 API 用の fetch。http() と違い 401 でリロードせず、アクセス拒否を
+ * AdminAccessError として投げ返す（画面が理由別の案内を出せるようにする）。
+ */
+async function adminHttp<T>(url: string, method: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: "same-origin",
+  });
+  if (res.status === 401) throw new AdminAccessError("unauthorized");
+  if (res.status === 403) throw new AdminAccessError("forbidden");
+  if (res.status === 503) throw new AdminAccessError("unconfigured");
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(detail?.error || `${method} ${url} -> ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
 export const api = {
   // ---- 認証 ----
   // 現在のユーザーを取得。未ログインは null（認証ゲートがログイン画面を出す）。
@@ -183,6 +232,13 @@ export const api = {
   addMember: (id: string, email: string) => http<ProjectMembers>(`/api/projects/${id}/members`, "POST", { email }),
   removeMember: (id: string, email: string) =>
     http<ProjectMembers>(`/api/projects/${id}/members/${encodeURIComponent(email)}`, "DELETE"),
+
+  // ---- 管理ダッシュボード（admin 限定・Basic 認証）----
+  // /admin/* は Basic 認証（ブラウザが資格情報を保持）+ role=admin の二段構え。
+  // 401（未ログイン）でアプリ全体をリロードさせたくないので http() は使わない。
+  listAdminUsers: () => adminHttp<AdminUser[]>("/admin/api/users", "GET"),
+  updateAdminUser: (sub: string, patch: { allowed?: boolean; role?: Role }) =>
+    adminHttp<AdminUser>(`/admin/api/users/${encodeURIComponent(sub)}`, "PATCH", patch),
 
   getTrip: () => http<TripPayload>("/api/trip", "GET"),
 
