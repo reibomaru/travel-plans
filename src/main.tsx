@@ -9,6 +9,7 @@ import { AuthGate } from "./components/AuthGate";
 import { OnboardingProvider } from "./components/onboarding/OnboardingProvider";
 import { ProjectProvider } from "./project";
 import Layout from "./components/Layout";
+import { setupPWA } from "./pwa";
 import ProjectsPage from "./pages/ProjectsPage";
 import ItineraryPage from "./pages/ItineraryPage";
 import BudgetPage from "./pages/BudgetPage";
@@ -31,6 +32,8 @@ function ProjectShell() {
     </ProjectProvider>
   );
 }
+
+setupPWA();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
